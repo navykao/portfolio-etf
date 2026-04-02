@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Portfolio ETF Grow</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>US Stock Dividend & Growth Calculator</h1>
+    <div class="settings">
+      <label>Initial Investment ($): <input id="initial" type="number" value="5000"></label>
+      <label>Monthly Contribution ($): <input id="monthly" type="number" value="500"></label>
+      <label>Withholding Tax (%): <input id="tax" type="number" value="15"></label>
+      <label>Investment Period (yrs): <input id="years" type="number" value="15"></label>
+      <button onclick="calculate()">Calculate</button>
+    </div>
+    <div id="results"></div>
+    <canvas id="growthChart"></canvas>
+    <canvas id="dividendChart"></canvas>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

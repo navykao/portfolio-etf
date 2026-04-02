@@ -1,0 +1,26 @@
+body {
+  background-color: #121212;
+  color: #f0f0f0;
+  font-family: Arial, sans-serif;
+}
+#app {
+  max-width: 900px;
+  margin: auto;
+  padding: 20px;
+}
+.settings label {
+  display: block;
+  margin: 10px 0;
+}
+button {
+  background: #0078d7;
+  color: white;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+}
+canvas {
+  margin-top: 20px;
+  background: #1e1e1e;
+  padding: 10px;
+}
