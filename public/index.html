@@ -1,25 +1,176 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <title>Portfolio ETF Grow</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Portfolio ETF — Stock Lookup</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#6ee7b7;--muted:#94a3b8;color-scheme:dark}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+    body{background:linear-gradient(180deg,#071029 0%, #071827 100%);color:#e6eef8;display:flex;align-items:center;justify-content:center;padding:24px}
+    .container{width:100%;max-width:980px}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+    h1{font-size:20px;margin:0}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.04);padding:18px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    input[type="text"]{padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;min-width:160px}
+    button{padding:10px 14px;border-radius:8px;border:0;background:linear-gradient(90deg,var(--accent),#34d399);color:#042018;font-weight:600;cursor:pointer}
+    .status{margin-top:10px;color:var(--muted);font-size:14px}
+    .grid{display:grid;grid-template-columns:1fr 360px;gap:12px;margin-top:12px}
+    .info{display:flex;flex-direction:column;gap:8px}
+    .stat{background:rgba(255,255,255,0.02);padding:12px;border-radius:8px}
+    .stat strong{display:block;font-size:18px}
+    canvas{background:transparent;border-radius:8px}
+    footer{margin-top:14px;color:var(--muted);font-size:13px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr;}.controls{flex-direction:column;align-items:stretch}}
+  </style>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <div id="app">
-    <h1>US Stock Dividend & Growth Calculator</h1>
-    <div class="settings">
-      <label>Initial Investment ($): <input id="initial" type="number" value="5000"></label>
-      <label>Monthly Contribution ($): <input id="monthly" type="number" value="500"></label>
-      <label>Withholding Tax (%): <input id="tax" type="number" value="15"></label>
-      <label>Investment Period (yrs): <input id="years" type="number" value="15"></label>
-      <button onclick="calculate()">Calculate</button>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Portfolio ETF — ตรวจราคาหุ้น</h1>
+        <div style="color:var(--muted);font-size:13px">เรียกข้อมูลจาก Alpha Vantage ผ่าน API ของเซิร์ฟเวอร์</div>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="controls">
+        <input id="symbolInput" type="text" placeholder="พิมพ์สัญลักษณ์หุ้น เช่น AAPL, MSFT" value="AAPL" />
+        <button id="fetchBtn">ค้นหา</button>
+        <button id="refreshBtn" title="รีเฟรชข้อมูลปัจจุบัน">รีเฟรช</button>
+        <div style="flex:1"></div>
+        <div style="color:var(--muted);font-size:13px">Server: <span id="serverUrl">/api/stock/:symbol</span></div>
+      </div>
+
+      <div class="status" id="status">สถานะ: พร้อมใช้งาน</div>
+
+      <div class="grid">
+        <div class="info">
+          <div class="stat">
+            <strong id="symbol">-</strong>
+            <div id="price" style="font-size:20px">-</div>
+            <div id="change" style="color:var(--muted)">-</div>
+          </div>
+
+          <div class="stat">
+            <div style="font-size:14px;color:var(--muted)">Raw JSON Response</div>
+            <pre id="raw" style="white-space:pre-wrap;word-break:break-word;margin:8px 0 0 0;font-size:13px;color:#cfeff0;background:rgba(0,0,0,0.12);padding:8px;border-radius:6px;max-height:220px;overflow:auto">-</pre>
+          </div>
+        </div>
+
+        <div class="card" style="padding:12px">
+          <canvas id="priceChart" width="360" height="240"></canvas>
+        </div>
+      </div>
+
+      <footer>
+        <div>หมายเหตุ: หากหน้าแสดงข้อความว่า instance กำลังตื่นตัว ให้รอ 30–60 วินาทีแล้วลองรีเฟรช</div>
+      </footer>
     </div>
-    <div id="results"></div>
-    <canvas id="growthChart"></canvas>
-    <canvas id="dividendChart"></canvas>
   </div>
-  <script src="app.js"></script>
+
+  <script>
+    // DOM elements
+    const symbolInput = document.getElementById('symbolInput');
+    const fetchBtn = document.getElementById('fetchBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const statusEl = document.getElementById('status');
+    const symbolEl = document.getElementById('symbol');
+    const priceEl = document.getElementById('price');
+    const changeEl = document.getElementById('change');
+    const rawEl = document.getElementById('raw');
+
+    // Chart setup
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [], datasets: [{
+          label: 'Price',
+          data: [],
+          borderColor: '#6ee7b7',
+          backgroundColor: 'rgba(110,231,183,0.12)',
+          tension: 0.2,
+          pointRadius: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { display: false },
+          y: { ticks: { color: '#cfeff0' } }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // Helper to update UI
+    function setStatus(text, isError = false) {
+      statusEl.textContent = 'สถานะ: ' + text;
+      statusEl.style.color = isError ? '#ffb4b4' : 'var(--muted)';
+    }
+
+    // Fetch stock data from server endpoint
+    async function fetchStock(symbol) {
+      setStatus('กำลังดึงข้อมูล...');
+      symbol = symbol.trim().toUpperCase();
+      if (!symbol) {
+        setStatus('กรุณาใส่สัญลักษณ์หุ้น', true);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/stock/${encodeURIComponent(symbol)}`);
+        if (!res.ok) {
+          const text = await res.text();
+          setStatus('เกิดข้อผิดพลาดจากเซิร์ฟเวอร์', true);
+          rawEl.textContent = text;
+          return;
+        }
+        const data = await res.json();
+
+        // Update UI
+        symbolEl.textContent = data.symbol || symbol;
+        priceEl.textContent = data.price ? parseFloat(data.price).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' USD' : '-';
+        changeEl.textContent = data.change ? `${data.change} (${data.changePercent || '-'})` : '-';
+        rawEl.textContent = JSON.stringify(data, null, 2);
+
+        // Update chart (append latest price)
+        const priceNum = data.price ? Number(data.price) : null;
+        if (priceNum !== null && !Number.isNaN(priceNum)) {
+          const now = new Date().toLocaleTimeString();
+          chart.data.labels.push(now);
+          chart.data.datasets[0].data.push(priceNum);
+          // keep last 20 points
+          if (chart.data.labels.length > 20) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+          }
+          chart.update();
+        }
+
+        setStatus('อัปเดตข้อมูลล่าสุด');
+      } catch (err) {
+        setStatus('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', true);
+        rawEl.textContent = err.message || String(err);
+      }
+    }
+
+    // Event listeners
+    fetchBtn.addEventListener('click', () => fetchStock(symbolInput.value));
+    refreshBtn.addEventListener('click', () => fetchStock(symbolInput.value));
+    symbolInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') fetchStock(symbolInput.value); });
+
+    // Auto fetch default symbol on load
+    window.addEventListener('load', () => {
+      const defaultSymbol = symbolInput.value || 'AAPL';
+      fetchStock(defaultSymbol);
+    });
+  </script>
 </body>
 </html>
